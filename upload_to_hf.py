@@ -48,34 +48,39 @@ api.upload_folder(
     repo_type=REPO_TYPE,
 )
 
-# 4. Data
+# 4. Data - single commit for all data files
 print("Uploading data files...")
-
-api.upload_file(
-    path_or_fileobj=str(LOCAL_ROOT / "data/realtime/country=FR/realtime.parquet"),
-    path_in_repo="data/realtime/country=FR/realtime.parquet",
-    repo_id=HF_REPO_ID,
-    repo_type=REPO_TYPE,
-)
-
-for year in [2024, 2026]:
-    folder = LOCAL_ROOT / f"data/featured/country=FR/year={year}"
-    for parquet_file in folder.glob("*.parquet"):
-        api.upload_file(
-            path_or_fileobj=str(parquet_file),
-            path_in_repo=f"data/featured/country=FR/year={year}/{parquet_file.name}",
-            repo_id=HF_REPO_ID,
-            repo_type=REPO_TYPE,
-        )
 
 monitoring_dir = LOCAL_ROOT / "data/monitoring"
 latest_report = sorted(monitoring_dir.glob("*.json"))[-1]
-api.upload_file(
-    path_or_fileobj=str(latest_report),
-    path_in_repo=f"data/monitoring/{latest_report.name}",
-    repo_id=HF_REPO_ID,
-    repo_type=REPO_TYPE,
-)
 
-print("\nDone. Visit your Space at:")
-print(f"  https://huggingface.co/spaces/{HF_REPO_ID}")
+import shutil, tempfile
+
+with tempfile.TemporaryDirectory() as tmp:
+    tmp = Path(tmp)
+
+    # realtime
+    dest_rt = tmp / "data/realtime/country=FR"
+    dest_rt.mkdir(parents=True)
+    shutil.copy(LOCAL_ROOT / "data/realtime/country=FR/realtime.parquet", dest_rt)
+
+    # featured
+    for year in [2024, 2026]:
+        src_dir = LOCAL_ROOT / f"data/featured/country=FR/year={year}"
+        dest_dir = tmp / f"data/featured/country=FR/year={year}"
+        dest_dir.mkdir(parents=True)
+        for f in src_dir.glob("*.parquet"):
+            shutil.copy(f, dest_dir)
+
+    # monitoring
+    dest_mon = tmp / "data/monitoring"
+    dest_mon.mkdir(parents=True)
+    shutil.copy(latest_report, dest_mon)
+
+    api.upload_folder(
+        folder_path=str(tmp),
+        path_in_repo="data",
+        repo_id=HF_REPO_ID,
+        repo_type=REPO_TYPE,
+        commit_message="chore: update all data files",
+    )

@@ -61,29 +61,33 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python - <<'EOF'
-          from huggingface_hub import HfApi
+          import shutil, tempfile
           from pathlib import Path
+          from huggingface_hub import HfApi
 
           api = HfApi(token="${{ secrets.HF_TOKEN }}")
           repo_id = "bachirij/energy-intelligence-platform"
-          repo_type = "space"
 
-          # Upload realtime snapshot
-          api.upload_file(
-              path_or_fileobj="data/realtime/country=FR/realtime.parquet",
-              path_in_repo="data/realtime/country=FR/realtime.parquet",
-              repo_id=repo_id,
-              repo_type=repo_type,
-          )
-
-          # Upload latest monitoring report
           monitoring_dir = Path("data/monitoring")
           latest = sorted(monitoring_dir.glob("*.json"))[-1]
-          api.upload_file(
-              path_or_fileobj=str(latest),
-              path_in_repo=f"data/monitoring/{latest.name}",
-              repo_id=repo_id,
-              repo_type=repo_type,
-          )
+
+          with tempfile.TemporaryDirectory() as tmp:
+              tmp = Path(tmp)
+
+              dest_rt = tmp / "data/realtime/country=FR"
+              dest_rt.mkdir(parents=True)
+              shutil.copy("data/realtime/country=FR/realtime.parquet", dest_rt)
+
+              dest_mon = tmp / "data/monitoring"
+              dest_mon.mkdir(parents=True)
+              shutil.copy(latest, dest_mon)
+
+              api.upload_folder(
+                  folder_path=str(tmp),
+                  repo_id=repo_id,
+                  repo_type="space",
+                  commit_message="chore: update realtime snapshot and monitoring report",
+              )
+
           print("Done.")
           EOF
